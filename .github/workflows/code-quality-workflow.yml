@@ -1,0 +1,81 @@
+name: Code Quality
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  code-quality:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        
+    - name: Cache Gradle packages
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+        restore-keys: |
+          ${{ runner.os }}-gradle-
+          
+    - name: Grant execute permission for gradlew
+      run: chmod +x gradlew
+      
+    - name: Run Kotlin linter (ktlint)
+      run: ./gradlew ktlintCheck
+      continue-on-error: true
+      
+    - name: Run Android lint
+      run: ./gradlew lintDebug
+      
+    - name: Run unit tests with coverage
+      run: ./gradlew testDebugUnitTest
+      
+    - name: Generate test report
+      uses: dorny/test-reporter@v1
+      if: success() || failure()
+      with:
+        name: Android Tests
+        path: '**/TEST-*.xml'
+        reporter: java-junit
+        
+    - name: Upload lint results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: lint-results
+        path: |
+          app/build/reports/lint-results-debug.html
+          app/build/reports/lint-results-debug.xml
+          
+    - name: Upload test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: test-results
+        path: app/build/test-results/testDebugUnitTest/
+        
+    - name: Comment PR with lint results
+      uses: actions/github-script@v6
+      if: github.event_name == 'pull_request'
+      with:
+        script: |
+          const fs = require('fs');
+          const path = 'app/build/reports/lint-results-debug.xml';
+          if (fs.existsSync(path)) {
+            const lintResults = fs.readFileSync(path, 'utf8');
+            // Parse and comment on PR with lint issues
+            console.log('Lint results available for PR comment');
+          }

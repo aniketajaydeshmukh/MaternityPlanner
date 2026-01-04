@@ -1,0 +1,84 @@
+name: Release Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        
+    - name: Cache Gradle packages
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+        restore-keys: |
+          ${{ runner.os }}-gradle-
+        
+    - name: Grant execute permission for gradlew
+      run: chmod +x gradlew
+      
+    - name: Build release APK
+      run: ./gradlew assembleRelease
+      
+    - name: Get release version
+      id: get_version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ steps.get_version.outputs.VERSION }}
+        release_name: Enhanced Maternity Tracker ${{ steps.get_version.outputs.VERSION }}
+        body: |
+          ## 🎉 Enhanced Maternity & Baby Shopping Tracker ${{ steps.get_version.outputs.VERSION }}
+          
+          ### ✨ Features
+          - 🛍️ Advanced shopping list management
+          - 🏷️ Label system with 8 color-coded categories
+          - 💰 Budget tracking with estimated vs actual prices
+          - 📊 Visual analytics with animated charts
+          - ⚡ Quick purchase functionality
+          - 🎨 Material 3 design
+          
+          ### 📱 Installation
+          Download the APK below and install on your Android device (API 24+)
+          
+          ### 🔧 Technical Details
+          - Built with Jetpack Compose + Material 3
+          - Room database with migration support
+          - MVVM architecture with Repository pattern
+          - Kotlin Coroutines + Flow for reactive programming
+          
+          ### 🐛 Bug Reports
+          Please report issues on our [GitHub Issues](https://github.com/${{ github.repository }}/issues) page.
+        draft: false
+        prerelease: false
+        
+    - name: Upload Release APK
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: app/build/outputs/apk/release/app-release-unsigned.apk
+        asset_name: enhanced-maternity-tracker-${{ steps.get_version.outputs.VERSION }}.apk
+        asset_content_type: application/vnd.android.package-archive
